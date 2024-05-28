@@ -23,7 +23,8 @@
 """
 from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication
 from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtWidgets import QAction
+from qgis.PyQt.QtWidgets import QAction, QFileDialog
+from qgis.core import QgsProject, Qgis
 
 # Initialize Qt resources from file resources.py
 from .resources import *
@@ -179,6 +180,10 @@ class SaveAttributes:
                 action)
             self.iface.removeToolBarIcon(action)
 
+    def select_output_file(self):
+        filename, _filter = QFileDialog.getSaveFileName(
+        self.dlg, "Select output file","",'*.csv')
+        self.dlg.lineEdit.setText(filename)
 
     def run(self):
         """Run method that performs all the real work"""
@@ -188,7 +193,11 @@ class SaveAttributes:
         if self.first_start == True:
             self.first_start = False
             self.dlg = SaveAttributesDialog()
+            self.dlg.pushButton.clicked.connect(self.select_output_file)
 
+        layers = QgsProject.instance().layerTreeRoot().children()
+        self.dlg.comboBox.clear()
+        self.dlg.comboBox.addItems([layer.name() for layer in layers])
         # show the dialog
         self.dlg.show()
         # Run the dialog event loop
@@ -197,4 +206,19 @@ class SaveAttributes:
         if result:
             # Do something useful here - delete the line containing pass and
             # substitute with your code.
-            pass
+            filename = self.dlg.lineEdit.text()
+            with open (filename, 'w') as output_file:
+                selectedLayerIndex = self.dlg.comboBox.currentIndex()
+                selectedLayer = layers[selectedLayerIndex].layer()
+                fieldnames = [field.name() for field in selectedLayer.fields()]
+                # write csv header
+                line = ','.join(name for name in fieldnames) + '\n'
+                output_file.write(line)
+                #write feature attributes
+                for f in selectedLayer.getFeatures():
+                    line = ','.join(str(f[name]) for name in fieldnames) + '\n'
+                    output_file.write(line)
+            self.iface.messageBar().pushMessage(
+            "Success","Output file written at " + filename,
+            level=Qgis.Success, duration = 3)
+            
